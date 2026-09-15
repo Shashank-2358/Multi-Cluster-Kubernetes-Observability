@@ -1,0 +1,45 @@
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE & Editor Files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Environment and Secret Files
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+*.pfx
+*.p12
+
+# Kubernetes / Cluster sensitive files & kubeconfigs
+*kubeconfig*
+*.kubeconfig
+*.kube/
+
+# Logs and temporary files
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# Terraform / Infrastructure temporary files (if applicable)
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
