@@ -35,14 +35,14 @@ spec:
           ports:
             - containerPort: 3000
           volumeMounts:
+            - name: grafana-storage
+              mountPath: /var/lib/grafana
             - name: datasource
               mountPath: /etc/grafana/provisioning/datasources
             - name: dashboard-provider
               mountPath: /etc/grafana/provisioning/dashboards
             - name: dashboard-json
               mountPath: /var/lib/grafana/dashboards
-            - name: grafana-storage
-              mountPath: /var/lib/grafana
           resources:
             requests:
               cpu: 50m

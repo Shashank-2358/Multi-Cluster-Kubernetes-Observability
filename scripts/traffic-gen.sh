@@ -4,28 +4,23 @@
 set -euo pipefail
 
 NAMESPACE="demo"
-POD_NAME="traffic-gen"
+DEPLOYMENT_NAME="traffic-gen"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MANIFEST="${SCRIPT_DIR}/../sample-apps/traffic-gen.yaml"
 
-echo "==> Starting traffic generator pod in namespace: ${NAMESPACE}"
+echo "==> Deploying traffic generator Deployment in namespace: ${NAMESPACE}"
 echo "    Target: http://frontend:8080/"
 echo "    Interval: 0.5s"
-echo "    Press Ctrl+C and run: kubectl delete pod ${POD_NAME} -n ${NAMESPACE}  to stop"
+echo "    Self-healing Deployment with restartPolicy: Always"
 echo ""
 
-# Delete any existing traffic-gen pod first
-kubectl delete pod "${POD_NAME}" -n "${NAMESPACE}" --ignore-not-found=true
+# Remove any legacy bare pod if present
+kubectl delete pod "${DEPLOYMENT_NAME}" -n "${NAMESPACE}" --ignore-not-found=true
 
-kubectl run "${POD_NAME}" \
-  --namespace="${NAMESPACE}" \
-  --image=curlimages/curl:8.7.1 \
-  --restart=Never \
-  --command \
-  -- sh -c 'while true; do
-    code=$(curl -s -o /dev/null -w "%{http_code}" http://frontend:8080/);
-    echo "$(date -Iseconds) HTTP $code";
-    sleep 0.5;
-  done'
+# Apply deployment manifest idempotently
+kubectl apply -f "${MANIFEST}"
 
 echo ""
-echo "==> Pod started. Tail logs with:"
-echo "    kubectl logs -f ${POD_NAME} -n ${NAMESPACE}"
+echo "==> Deployment applied. Check status with:"
+echo "    kubectl rollout status deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE}"
+echo "    kubectl logs -f -l app=${DEPLOYMENT_NAME} -n ${NAMESPACE}"

@@ -13,7 +13,7 @@ data:
       "tags": ["beyla", "phase0", "ebpf"],
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 1,
+      "version": 2,
       "refresh": "15s",
       "time": { "from": "now-15m", "to": "now" },
       "panels": [
@@ -22,40 +22,18 @@ data:
           "type": "timeseries",
           "title": "L4 · Network Flow Bytes/sec",
           "description": "Rate of bytes observed in network flows captured by Beyla eBPF",
-          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+          "gridPos": { "x": 0, "y": 0, "w": 24, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
               "expr": "rate(beyla_network_flow_bytes_total[1m])",
-              "legendFormat": "{{direction}} {{src_name}}→{{dst_name}}",
+              "legendFormat": "{{direction}} {{k8s_src_owner_name}}→{{k8s_dst_owner_name}}",
               "refId": "A"
             }
           ],
           "fieldConfig": {
             "defaults": {
               "unit": "Bps",
-              "color": { "mode": "palette-classic" }
-            }
-          },
-          "options": { "legend": { "displayMode": "list", "placement": "bottom" } }
-        },
-        {
-          "id": 2,
-          "type": "timeseries",
-          "title": "L4 · TCP Connections/sec",
-          "description": "Rate of TCP connections observed by Beyla (L4 transport layer)",
-          "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [
-            {
-              "expr": "rate(beyla_network_flow_bytes_total[1m]) or rate(tcp_connections_active[1m]) or vector(0)",
-              "legendFormat": "connections",
-              "refId": "A"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
               "color": { "mode": "palette-classic" }
             }
           },

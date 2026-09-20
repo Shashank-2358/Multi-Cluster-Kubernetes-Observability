@@ -8,8 +8,15 @@ metadata:
 data:
   beyla-config.yaml: |
     # Beyla Phase-0 configuration
-    # Discovery: auto-detect all processes on port 8080
-    open_port: 8080
+    # system_wide: true bypasses the PID-namespace-inode-based CommonPIDsFilter,
+    # which fails on WSL2 because bpf_get_ns_current_pid_tgid() returns Namespace:1
+    # (inode 1, invalid) instead of the real PID namespace inode (e.g. 4026533185).
+    # IdentityPidsFilter is used instead and accepts all captured eBPF spans.
+    discovery:
+      system_wide: true
+      exclude_instrument:
+        - k8s_namespace: kube-system
+        - k8s_namespace: monitoring
 
     # Kubernetes metadata enrichment
     attributes:
@@ -27,7 +34,7 @@ data:
       path: /metrics
 
     # Logging
-    log_level: info
+    log_level: debug
 ---
 apiVersion: apps/v1
 kind: DaemonSet

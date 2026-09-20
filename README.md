@@ -23,34 +23,41 @@
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│  K3s Cluster (single node)                                       │
-│                                                                  │
-│  namespace: demo                                                 │
-│  ┌──────────────┐    HTTP proxy    ┌──────────────┐             │
-│  │   frontend   │ ───────────────► │   backend    │             │
-│  │  nginx:alpine│ :8080            │  http-echo   │ :8080       │
-│  └──────────────┘                  └──────────────┘             │
-│                                                                  │
-│  namespace: beyla                                                │
-│  ┌─────────────────────────────────────────────────┐            │
-│  │  Beyla DaemonSet  (grafana/beyla:2.1.0)         │            │
-│  │  · eBPF hooks — auto-discovers port 8080        │            │
-│  │  · Emits L4 network + L7 HTTP metrics           │            │
-│  │  · Prometheus exporter → :9090/metrics          │            │
-│  └─────────────────────────────────────────────────┘            │
-│                │                                                 │
-│                │ pod-IP discovery (kubernetes_sd)                │
-│                ▼                                                 │
-│  namespace: monitoring                                           │
-│  ┌──────────────┐   PromQL   ┌──────────────┐                  │
-│  │  Prometheus  │ ◄────────► │   Grafana    │                  │
-│  │  v2.53.0     │            │  (latest)    │                  │
-│  │  :9090       │            │  :3000       │                  │
-│  └──────────────┘            └──────────────┘                  │
-│   NodePort 30900              NodePort 30300                    │
-└──────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  K3s Cluster (single node)                                           │
+│                                                                      │
+│  namespace: demo                                                     │
+│  ┌────────────┐  nginx proxy  ┌────────────┐  nginx proxy  ┌──────┐│
+│  │  frontend  │ ────────────► │  backend   │ ────────────► │ auth ││
+│  │ nginx:alpine│ :8080        │ nginx:alpine│ :8080        │http- ││
+│  └────────────┘               └────────────┘               │echo  ││
+│                                                             └──────┘│
+│  namespace: beyla                                                    │
+│  ┌──────────────────────────────────────────────────────┐           │
+│  │  Beyla DaemonSet  (grafana/beyla:2.1.0)              │           │
+│  │  · eBPF auto-discovers port 8080 across all hops     │           │
+│  │  · Emits L4 network + L7 HTTP metrics per service    │           │
+│  │  · Prometheus exporter → :9090/metrics               │           │
+│  └──────────────────────────────────────────────────────┘           │
+│                │                                                     │
+│                │ pod-IP discovery (kubernetes_sd)                   │
+│                ▼                                                     │
+│  namespace: monitoring                                               │
+│  ┌──────────────┐   PromQL   ┌──────────────┐                      │
+│  │  Prometheus  │ ◄────────► │   Grafana    │                      │
+│  │  v2.53.0     │            │  (latest)    │                      │
+│  │  :9090       │            │  :3000       │                      │
+│  │  cluster=    │            │              │                      │
+│  │  cluster-01  │            │              │                      │
+│  └──────────────┘            └──────────────┘                      │
+│   NodePort 30900              NodePort 30300                        │
+└──────────────────────────────────────────────────────────────────────┘
 ```
+
+**Three-hop service chain:** `traffic-gen` → `frontend` (nginx) → `backend` (nginx) → `auth` (http-echo).  
+Beyla captures L7 HTTP spans at each hop without any code changes.
+
+Beyla runs in `system_wide` discovery mode due to a WSL2 kernel limitation in PID namespace resolution (`bpf_get_ns_current_pid_tgid`), which otherwise causes child container HTTP spans to be dropped. To prevent storing host-wide metrics, Prometheus uses `metric_relabel_configs` to drop non-demo namespaces (`kube-system`, `monitoring`), and Grafana dashboard queries are scoped to `service_namespace="demo"`. Additionally, `traffic-gen` runs as a self-healing `Deployment` that automatically survives node and K3s restarts.
 
 **Key design choices:**
 
@@ -60,8 +67,9 @@
 | `hostPID: true` + `hostNetwork: true` | Required for eBPF to attach to host process namespaces |
 | `memlock-init` initContainer | Raises `RLIMIT_MEMLOCK` to unlimited; K3s/containerd caps it at 64 MiB by default, which blocks eBPF map creation |
 | Narrow ClusterRole RBAC | Beyla gets only `get/list/watch` on pods/services/nodes — no cluster-admin |
-| Prometheus pod-SD in `beyla` namespace | Scrapes Beyla pods by IP without needing a headless service |
+| Prometheus `external_labels: cluster: cluster-01` | Tags every metric with a cluster identity for Phase 1 remote_write federation |
 | Provisioned ConfigMaps for Grafana | Dashboard and datasource survive Grafana restarts; no manual import needed |
+| No Helm/kustomize | Plain Kubernetes YAML; easiest to understand, grep, and diff |
 
 ---
 
@@ -72,9 +80,12 @@
 | [K3s](https://k3s.io/) | v1.28+ | `curl -sfL https://get.k3s.io \| sh -` |
 | `kubectl` | matching cluster | Configured with `KUBECONFIG=/etc/rancher/k3s/k3s.yaml` or symlinked to `~/.kube/config` |
 | `curl` | any | Used by `verify.sh` |
-| Linux kernel | **5.8+** | Required for BPF capability and uprobe/kprobe attach used by Beyla |
+| Linux kernel | **5.8+** | Required for the `BPF` capability and uprobe/kprobe attach used by Beyla |
 
-> **WSL2 users:** Enable `KUBECONFIG` and make sure WSL2 can reach the NodePort IP printed by `verify.sh`. The IP can change after a WSL2 restart — re-check with `ip addr show eth0`.
+> **WSL2 users:** After a WSL2 restart the node IP changes. Re-check it with:
+> ```bash
+> kubectl get node -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}'
+> ```
 
 ---
 
@@ -90,19 +101,20 @@ multicluster-k8s/
 ├── prometheus/
 │   ├── namespace.yaml              # namespace: monitoring (shared with Grafana)
 │   ├── rbac.yaml                   # ServiceAccount + ClusterRole + ClusterRoleBinding
-│   ├── configmap.yaml              # prometheus.yml scrape config
+│   ├── configmap.yaml              # prometheus.yml — scrape config + cluster=cluster-01 label
 │   └── deployment.yaml             # Deployment + NodePort Service (:30900)
 │
 ├── grafana/
 │   ├── datasource-configmap.yaml   # Prometheus datasource (uid: prometheus)
 │   ├── dashboard-provider-configmap.yaml
-│   ├── dashboard-configmap.yaml    # Phase 0 dashboard JSON (5 panels)
+│   ├── dashboard-configmap.yaml    # Phase 0 dashboard — 4 panels (L4 bytes, req rate, latency, errors)
 │   └── deployment.yaml             # Deployment + NodePort Service (:30300)
 │
 ├── sample-apps/
 │   ├── namespace.yaml              # namespace: demo
-│   ├── backend.yaml                # hashicorp/http-echo — simple HTTP responder
-│   └── frontend.yaml               # nginx proxy → backend, on :8080
+│   ├── auth.yaml                   # hashicorp/http-echo — leaf service ("Hello from auth")
+│   ├── backend.yaml                # nginx:alpine proxy → auth:8080  (middle hop)
+│   └── frontend.yaml               # nginx:alpine proxy → backend:8080 (entry hop)
 │
 └── scripts/
     ├── verify.sh                   # End-to-end health check (colour-coded pass/fail)
@@ -113,16 +125,18 @@ multicluster-k8s/
 
 ## Bring-Up (Step-by-Step)
 
-Run every command from the repo root. Order matters — apply namespaces before workloads.
+Run every command from the **repo root**. Order matters — apply namespaces before workloads, RBAC before pods.
 
 ### 1 — Sample Applications
 
 ```bash
 kubectl apply -f sample-apps/namespace.yaml
+kubectl apply -f sample-apps/auth.yaml
 kubectl apply -f sample-apps/backend.yaml
 kubectl apply -f sample-apps/frontend.yaml
 
-# Wait for pods
+# Wait for all three to be ready
+kubectl rollout status deployment/auth     -n demo
 kubectl rollout status deployment/backend  -n demo
 kubectl rollout status deployment/frontend -n demo
 ```
@@ -145,11 +159,10 @@ kubectl apply -f beyla/namespace.yaml
 kubectl apply -f beyla/clusterrole.yaml
 kubectl apply -f beyla/daemonset.yaml
 
-# DaemonSet — wait for the pod to be ready (initContainer runs first)
 kubectl rollout status daemonset/beyla -n beyla
 ```
 
-> ⏱ The `memlock-init` initContainer takes ~5 s on first pull. If Beyla crashes with `permission denied` on eBPF map creation, check that your kernel is ≥ 5.8 and `SYS_RESOURCE` / `BPF` capabilities are not stripped by your container runtime.
+> ⏱ The `memlock-init` initContainer takes ~5 s on first pull. If Beyla crashes with `permission denied` on eBPF map creation, verify your kernel is ≥ 5.8.
 
 ### 4 — Grafana
 
@@ -161,6 +174,13 @@ kubectl apply -f grafana/deployment.yaml
 
 kubectl rollout status deployment/grafana -n monitoring
 ```
+
+> **Already applied Grafana before?** Re-apply the ConfigMaps then restart the Deployment so Grafana re-reads provisioning:
+> ```bash
+> kubectl apply -f grafana/datasource-configmap.yaml \
+>               -f grafana/dashboard-configmap.yaml
+> kubectl rollout restart deployment/grafana -n monitoring
+> ```
 
 ---
 
@@ -182,8 +202,10 @@ Expected output (all green):
 [2] Sample Apps (namespace: demo)
   ✅ PASS  backend pod Running
   ✅ PASS  frontend pod Running
+  ✅ PASS  auth pod Running
   ✅ PASS  backend service exists
   ✅ PASS  frontend service exists
+  ✅ PASS  auth service exists
 
 [3] Grafana Beyla (namespace: beyla)
   ✅ PASS  beyla DaemonSet exists
@@ -198,28 +220,18 @@ Expected output (all green):
   ✅ PASS  grafana pod Running
   ✅ PASS  grafana /api/health returns ok
 
-[6] Traffic Generator
-  ...
-
 === Summary ===
-  Passed: 11  Failed: 0
+  Passed: 13  Failed: 0
 
 All checks passed! Pipeline is healthy.
-```
-
-Manually confirm Beyla metrics are flowing into Prometheus:
-
-```bash
-# Port-forward Prometheus and query beyla metrics
-kubectl port-forward svc/prometheus 9090:9090 -n monitoring &
-curl -s 'http://localhost:9090/api/v1/query?query=beyla_network_flow_bytes_total' | jq .status
 ```
 
 ---
 
 ## Generate Traffic
 
-The traffic generator runs as an in-cluster pod sending HTTP requests to `frontend:8080` every 0.5 s.
+The traffic generator runs an in-cluster pod that hits `frontend:8080` every 0.5 s,  
+driving requests through the full **frontend → backend → auth** chain.
 
 ```bash
 chmod +x scripts/traffic-gen.sh
@@ -245,9 +257,7 @@ kubectl delete pod traffic-gen -n demo
 1. Get your node IP:
 
    ```bash
-   kubectl get node -o wide
-   # or for WSL2:
-   ip addr show eth0 | grep 'inet '
+   kubectl get node -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}'
    ```
 
 2. Open in browser:
@@ -258,7 +268,7 @@ kubectl delete pod traffic-gen -n demo
    | Prometheus | `http://<NODE_IP>:30900` | — |
 
 3. Navigate to **Dashboards → Phase 0 — Beyla L4 + L7 Observability**.  
-   You should see live data within ~15 s after the traffic generator starts.
+   All four panels should show live data within ~15 s of the traffic generator starting.
 
 ---
 
@@ -283,7 +293,7 @@ kubectl delete -f beyla/
 kubectl delete -f sample-apps/
 ```
 
-Or nuke the three namespaces directly:
+Or nuke all three namespaces at once:
 
 ```bash
 kubectl delete namespace demo beyla monitoring
@@ -293,13 +303,16 @@ kubectl delete namespace demo beyla monitoring
 
 ## Dashboard Panels
 
-| # | Panel | Layer | Metric / Query |
+The dashboard (`uid: phase0-beyla`) contains four panels. All query the Prometheus datasource (`uid: prometheus`).
+
+| # | Panel | Layer | Metric |
 |---|---|---|---|
-| 1 | **Network Flow Bytes/sec** | L4 | `rate(beyla_network_flow_bytes_total[1m])` |
-| 2 | **TCP Connections/sec** ⚠️ | L4 | Falls back to byte-rate (see caveats) |
-| 3 | **HTTP Request Rate** | L7 | `rate(http_server_request_duration_seconds_count[1m])` |
-| 4 | **HTTP Latency p50/p95/p99** | L7 | `histogram_quantile` over `http_server_request_duration_seconds_bucket` |
-| 5 | **HTTP Error Rate (5xx)** | L7 | Filtered on `http_response_status_code=~"5.."` |
+| 1 | **Network Flow Bytes/sec** | L4 | `rate(beyla_network_flow_bytes_total[1m])` — full-width row |
+| 2 | **HTTP Request Rate** | L7 | `rate(http_server_request_duration_seconds_count[1m])` per service |
+| 3 | **HTTP Latency p50 / p95 / p99** | L7 | `histogram_quantile` over `http_server_request_duration_seconds_bucket` |
+| 4 | **HTTP Error Rate (5xx/sec)** | L7 | Filtered on `http_response_status_code=~"5.."` — should be zero |
+
+> **Note:** The "TCP Connections/sec" panel was removed. Beyla only exposes byte counters (`beyla_network_flow_bytes_total`), not a connection-count metric, so the panel was misleading.
 
 ---
 
@@ -307,21 +320,21 @@ kubectl delete namespace demo beyla monitoring
 
 | Issue | Impact | Workaround / Fix |
 |---|---|---|
-| **Panel 2 — "TCP Connections/sec"** uses byte-rate fallback | Misleading label; not a true connection count | Rename or remove the panel until Beyla exposes a connection-count metric |
-| **emptyDir storage** for Prometheus & Grafana | All metric history and Grafana state are wiped on pod restart | Acceptable for PoC; add a PVC for persistence in Phase 1 |
-| **`admin/admin` Grafana credentials** | Fine locally; never expose externally | Change via `GF_SECURITY_ADMIN_PASSWORD` env var before any external access |
-| **`verify.sh` hardcodes WSL2 IP** (`172.23.95.187`) | Printed access URLs break after WSL2 restart | Replace with `$(kubectl get node -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')` |
-| **Single-node cluster** | No HA; Beyla DaemonSet has only one pod | Sufficient for Phase 0 PoC |
+| **`emptyDir` storage** for Prometheus & Grafana | All metric history and Grafana state wiped on pod restart | Fine for PoC; add a PVC in Phase 1 for persistence |
+| **`admin/admin` Grafana credentials** | Harmless locally | Set `GF_SECURITY_ADMIN_PASSWORD` env var before any external exposure |
+| **`verify.sh` access URLs hardcode a WSL2 IP** | URLs break after WSL2 restart | Use `kubectl get node -o jsonpath=...` (see above) to get the current IP |
+| **Single-node cluster** | No HA; Beyla DaemonSet runs one pod | Sufficient for Phase 0 PoC |
+| **Prometheus retention: 2 h** | Long demos will lose early data | Increase `--storage.tsdb.retention.time` if needed |
 
 ---
 
 ## Roadmap
 
-- **Phase 1** — Multi-cluster federation: add a second K3s cluster, cross-cluster Prometheus remote-write, and Thanos sidecar
-- **Phase 2** — Distributed tracing: enable Beyla's OpenTelemetry trace export, add Grafana Tempo
-- **Phase 3** — Alerting: add Prometheus AlertManager rules for p99 latency SLOs and error-rate thresholds
-- **Phase 4** — Persistent storage: replace `emptyDir` with local-path PVCs; add Grafana backup
+- **Phase 1** — Multi-cluster federation: second K3s cluster, Prometheus `remote_write` using the `cluster-01` label, Thanos sidecar
+- **Phase 2** — Distributed tracing: Beyla OpenTelemetry trace export, Grafana Tempo
+- **Phase 3** — Alerting: Prometheus AlertManager rules for p99 latency SLOs and 5xx error-rate thresholds
+- **Phase 4** — Persistent storage: local-path PVCs for Prometheus and Grafana
 
 ---
 
-> **Bottom line (as of Phase 0):** Architecture is correct, RBAC is properly scoped, and resource limits are set throughout. The datasource `uid` fix (see commit) is the only thing between this and fully live data. Run `verify.sh`, start `traffic-gen.sh`, and watch the Grafana dashboard populate in real time.
+> **Status (Phase 0):** Architecture is correct, RBAC is scoped, resource limits are set throughout, and the three-hop service chain gives Beyla's L7 tracing something real to show. Run `verify.sh` first, then `traffic-gen.sh`, and all four Grafana panels should populate within one scrape interval (15 s).

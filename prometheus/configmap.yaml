@@ -8,6 +8,8 @@ data:
     global:
       scrape_interval: 15s
       evaluation_interval: 15s
+      external_labels:
+        cluster: cluster-01
 
     scrape_configs:
       # Scrape Beyla pods by discovering pods in the beyla namespace
@@ -33,6 +35,10 @@ data:
             target_label: kubernetes_pod_name
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: kubernetes_node
+        metric_relabel_configs:
+          - source_labels: [__name__, service_namespace]
+            regex: 'http_server_request_duration_seconds.*;(|kube-system|kube-node-lease|monitoring|beyla|default)'
+            action: drop
 
       # Scrape Prometheus itself for meta-monitoring
       - job_name: 'prometheus'
