@@ -23,7 +23,7 @@ data:
           "title": "L4 · Network Flow Bytes/sec",
           "description": "Rate of bytes observed in network flows captured by Beyla eBPF",
           "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "-- Grafana --" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
               "expr": "rate(beyla_network_flow_bytes_total[1m])",
@@ -45,7 +45,7 @@ data:
           "title": "L4 · TCP Connections/sec",
           "description": "Rate of TCP connections observed by Beyla (L4 transport layer)",
           "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "-- Grafana --" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
               "expr": "rate(beyla_network_flow_bytes_total[1m]) or rate(tcp_connections_active[1m]) or vector(0)",
@@ -67,7 +67,7 @@ data:
           "title": "L7 · HTTP Request Rate (req/sec)",
           "description": "Inbound HTTP request rate captured by Beyla without code changes",
           "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "-- Grafana --" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
               "expr": "sum(rate(http_server_request_duration_seconds_count[1m])) by (service_name, url_path)",
@@ -89,7 +89,7 @@ data:
           "title": "L7 · HTTP Request Duration p50 / p95 / p99",
           "description": "HTTP server latency percentiles from Beyla histogram",
           "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "-- Grafana --" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
               "expr": "histogram_quantile(0.50, sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le, service_name))",
@@ -121,7 +121,7 @@ data:
           "title": "L7 · HTTP Error Rate (5xx/sec)",
           "description": "HTTP 5xx error rate — zero in a healthy system",
           "gridPos": { "x": 0, "y": 16, "w": 24, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "-- Grafana --" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
               "expr": "sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~\"5..\"}[1m])) by (service_name, http_response_status_code) or vector(0)",
