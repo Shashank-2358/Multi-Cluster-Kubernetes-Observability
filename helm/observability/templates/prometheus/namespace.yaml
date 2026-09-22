@@ -1,0 +1,8 @@
+{{- if .Values.prometheus.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    app.kubernetes.io/part-of: multicluster-k8s-phase0
+{{- end }}

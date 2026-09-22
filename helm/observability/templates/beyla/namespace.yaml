@@ -1,0 +1,8 @@
+{{- if .Values.beyla.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: beyla
+  labels:
+    app.kubernetes.io/part-of: multicluster-k8s-phase0
+{{- end }}

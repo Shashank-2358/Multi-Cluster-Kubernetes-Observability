@@ -1,0 +1,8 @@
+{{- if .Values.sampleApps.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+  labels:
+    app.kubernetes.io/part-of: multicluster-k8s-phase0
+{{- end }}

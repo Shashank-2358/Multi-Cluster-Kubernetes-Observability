@@ -1,0 +1,13 @@
+# Default values for observability.
+
+sampleApps:
+  enabled: true
+
+prometheus:
+  enabled: true
+
+beyla:
+  enabled: true
+
+grafana:
+  enabled: true
