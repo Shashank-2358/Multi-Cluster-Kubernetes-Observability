@@ -5,20 +5,10 @@ This Helm chart deploys the **Multi-Cluster Kubernetes Observability — Phase 0
 ## What is Helm and Why Was it Added?
 Helm is a package manager for Kubernetes. It allows you to package multiple Kubernetes YAML manifests into a single reusable "Chart".
 
-This Helm chart was added as an **alternative deployment method** to the existing static YAML manifests. It allows you to:
+This Helm chart is the **primary deployment method** for the project, replacing the previous static YAML manifests. It allows you to:
 - Deploy the entire stack with a single command.
 - Easily toggle individual components on/off (via `values.yaml`).
 - Package and version the observability stack for future multi-cluster environments.
-
-## Existing YAML Deployment Method (Preserved)
-The project originally uses static YAML files:
-```bash
-kubectl apply -f sample-apps/
-kubectl apply -f prometheus/
-kubectl apply -f beyla/
-kubectl apply -f grafana/
-```
-**Important:** The Helm chart does exactly the same thing. Do **NOT** install both the static YAMLs and the Helm chart at the same time into the same cluster, as they will conflict.
 
 ## Helm Chart Structure
 - `Chart.yaml`: Contains metadata about the chart (name, version, etc.).
@@ -38,8 +28,8 @@ You can also render the templates locally to see exactly what Kubernetes manifes
 helm template observability ./helm/observability
 ```
 
-### 2. Install on a Clean Cluster
-If you have a clean cluster (without the static YAMLs applied), you can install the entire observability stack with:
+### 2. Install on a Cluster
+You can install the entire observability stack with:
 ```bash
 helm install observability ./helm/observability
 ```

@@ -93,28 +93,11 @@ Beyla runs in `system_wide` discovery mode due to a WSL2 kernel limitation in PI
 
 ```
 multicluster-k8s/
-├── beyla/
-│   ├── namespace.yaml              # namespace: beyla
-│   ├── clusterrole.yaml            # ServiceAccount + ClusterRole + ClusterRoleBinding
-│   └── daemonset.yaml              # Beyla ConfigMap + DaemonSet
-│
-├── prometheus/
-│   ├── namespace.yaml              # namespace: monitoring (shared with Grafana)
-│   ├── rbac.yaml                   # ServiceAccount + ClusterRole + ClusterRoleBinding
-│   ├── configmap.yaml              # prometheus.yml — scrape config + cluster=cluster-01 label
-│   └── deployment.yaml             # Deployment + NodePort Service (:30900)
-│
-├── grafana/
-│   ├── datasource-configmap.yaml   # Prometheus datasource (uid: prometheus)
-│   ├── dashboard-provider-configmap.yaml
-│   ├── dashboard-configmap.yaml    # Phase 0 dashboard — 4 panels (L4 bytes, req rate, latency, errors)
-│   └── deployment.yaml             # Deployment + NodePort Service (:30300)
-│
-├── sample-apps/
-│   ├── namespace.yaml              # namespace: demo
-│   ├── auth.yaml                   # hashicorp/http-echo — leaf service ("Hello from auth")
-│   ├── backend.yaml                # nginx:alpine proxy → auth:8080  (middle hop)
-│   └── frontend.yaml               # nginx:alpine proxy → backend:8080 (entry hop)
+├── helm/
+│   └── observability/              # Helm chart for deploying the entire stack
+│       ├── templates/              # Helm templates for Beyla, Prometheus, Grafana, and apps
+│       ├── Chart.yaml              # Helm chart metadata
+│       └── values.yaml             # Configuration values
 │
 └── scripts/
     ├── verify.sh                   # End-to-end health check (colour-coded pass/fail)
@@ -125,62 +108,23 @@ multicluster-k8s/
 
 ## Bring-Up (Step-by-Step)
 
-Run every command from the **repo root**. Order matters — apply namespaces before workloads, RBAC before pods.
+Run every command from the **repo root**. 
 
-### 1 — Sample Applications
+### 1 — Install via Helm
 
 ```bash
-kubectl apply -f sample-apps/namespace.yaml
-kubectl apply -f sample-apps/auth.yaml
-kubectl apply -f sample-apps/backend.yaml
-kubectl apply -f sample-apps/frontend.yaml
-
-# Wait for all three to be ready
-kubectl rollout status deployment/auth     -n demo
-kubectl rollout status deployment/backend  -n demo
-kubectl rollout status deployment/frontend -n demo
+helm install observability ./helm/observability
 ```
 
-### 2 — Prometheus
-
+Wait for the deployments to be ready. You can verify the rollout status:
 ```bash
-kubectl apply -f prometheus/namespace.yaml
-kubectl apply -f prometheus/rbac.yaml
-kubectl apply -f prometheus/configmap.yaml
-kubectl apply -f prometheus/deployment.yaml
-
+kubectl rollout status deployment/auth -n demo
 kubectl rollout status deployment/prometheus -n monitoring
-```
-
-### 3 — Grafana Beyla (eBPF agent)
-
-```bash
-kubectl apply -f beyla/namespace.yaml
-kubectl apply -f beyla/clusterrole.yaml
-kubectl apply -f beyla/daemonset.yaml
-
 kubectl rollout status daemonset/beyla -n beyla
-```
-
-> ⏱ The `memlock-init` initContainer takes ~5 s on first pull. If Beyla crashes with `permission denied` on eBPF map creation, verify your kernel is ≥ 5.8.
-
-### 4 — Grafana
-
-```bash
-kubectl apply -f grafana/datasource-configmap.yaml
-kubectl apply -f grafana/dashboard-provider-configmap.yaml
-kubectl apply -f grafana/dashboard-configmap.yaml
-kubectl apply -f grafana/deployment.yaml
-
 kubectl rollout status deployment/grafana -n monitoring
 ```
 
-> **Already applied Grafana before?** Re-apply the ConfigMaps then restart the Deployment so Grafana re-reads provisioning:
-> ```bash
-> kubectl apply -f grafana/datasource-configmap.yaml \
->               -f grafana/dashboard-configmap.yaml
-> kubectl rollout restart deployment/grafana -n monitoring
-> ```
+> ⏱ The `memlock-init` initContainer takes ~5 s on first pull. If Beyla crashes with `permission denied` on eBPF map creation, verify your kernel is ≥ 5.8.
 
 ---
 
@@ -274,29 +218,16 @@ kubectl delete pod traffic-gen -n demo
 
 ## Tear-Down
 
-Remove everything in reverse order:
+Remove the observability stack using Helm:
 
 ```bash
-# Traffic generator (if running)
-kubectl delete pod traffic-gen -n demo --ignore-not-found
-
-# Grafana
-kubectl delete -f grafana/
-
-# Prometheus
-kubectl delete -f prometheus/
-
-# Beyla
-kubectl delete -f beyla/
-
-# Sample apps
-kubectl delete -f sample-apps/
+helm uninstall observability
 ```
 
-Or nuke all three namespaces at once:
+Stop and clean up the traffic generator (if running):
 
 ```bash
-kubectl delete namespace demo beyla monitoring
+kubectl delete pod traffic-gen -n demo --ignore-not-found
 ```
 
 ---
