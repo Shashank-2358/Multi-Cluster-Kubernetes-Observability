@@ -16,4 +16,12 @@ data:
         updateIntervalSeconds: 10
         options:
           path: /var/lib/grafana/dashboards
+      - name: 'extended'
+        orgId: 1
+        folder: 'Phase 0'
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        options:
+          path: /var/lib/grafana/dashboards/extended
 {{- end }}

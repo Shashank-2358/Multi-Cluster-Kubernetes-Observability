@@ -44,6 +44,8 @@ spec:
               mountPath: /etc/grafana/provisioning/dashboards
             - name: dashboard-json
               mountPath: /var/lib/grafana/dashboards
+            - name: dashboard-extended-json
+              mountPath: /var/lib/grafana/dashboards/extended
           resources:
             requests:
               cpu: 50m
@@ -67,6 +69,9 @@ spec:
         - name: dashboard-json
           configMap:
             name: grafana-dashboard-phase0
+        - name: dashboard-extended-json
+          configMap:
+            name: grafana-dashboard-extended
         - name: grafana-storage
           emptyDir: {}
 ---

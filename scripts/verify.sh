@@ -113,10 +113,12 @@ if [[ -n "${GRAFANA_POD}" ]]; then
   fi
 fi
 
-# ── [6] Traffic Generator ────────────────────────────────────────────────────
-echo -e "\n${BOLD}[6] Traffic Generator${RESET}"
-check_cmd "traffic-gen deployment exists" bash -c "kubectl get deployment traffic-gen -n demo &>/dev/null"
-check_cmd "traffic-gen pod Running"      bash -c "kubectl get pod -n demo -l app=traffic-gen | grep -q Running"
+# ── [6] External Traffic Endpoint (k6 / NodePort) ────────────────────────────
+echo -e "\n${BOLD}[6] External Traffic Endpoint (k6 / NodePort)${RESET}"
+NODE_IP=$(kubectl get node -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || echo "127.0.0.1")
+check_cmd "frontend NodePort 30080 exposed" bash -c "kubectl get svc frontend -n demo -o jsonpath='{.spec.ports[?(@.nodePort==30080)].nodePort}' | grep -q 30080"
+check_cmd "frontend NodePort reachable (HTTP 200)" bash -c "curl -s -o /dev/null -w '%{http_code}' http://${NODE_IP}:30080/ | grep -q 200"
+check_cmd "k6 load testing binary installed" bash -c "command -v k6 &>/dev/null || [[ -x '${HOME}/.local/bin/k6' ]]"
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo -e "\n${BOLD}=== Summary ===${RESET}"

@@ -95,13 +95,18 @@ Beyla runs in `system_wide` discovery mode due to a WSL2 kernel limitation in PI
 multicluster-k8s/
 ├── helm/
 │   └── observability/              # Helm chart for deploying the entire stack
-│       ├── templates/              # Helm templates for Beyla, Prometheus, Grafana, and apps
+│       ├── templates/              # Templates for Beyla, Prometheus, Grafana, and demo apps
 │       ├── Chart.yaml              # Helm chart metadata
 │       └── values.yaml             # Configuration values
 │
+├── load-testing/                   # External load testing suite
+│   ├── k6/
+│   │   ├── scenarios/              # k6 test scenarios (smoke.js, ramp-up.js)
+│   │   └── run.sh                  # Runner script auto-targeting NodePort 30080
+│   └── README.md                   # Load testing documentation
+│
 └── scripts/
-    ├── verify.sh                   # End-to-end health check (colour-coded pass/fail)
-    └── traffic-gen.sh              # Runs an in-cluster curl loop to generate HTTP traffic
+    └── verify.sh                   # End-to-end health check (colour-coded pass/fail)
 ```
 
 ---
@@ -172,26 +177,27 @@ All checks passed! Pipeline is healthy.
 
 ---
 
-## Generate Traffic
+## Generate Traffic (External Load Testing with k6)
 
-The traffic generator runs an in-cluster pod that hits `frontend:8080` every 0.5 s,  
-driving requests through the full **frontend → backend → auth** chain.
+External traffic is generated using **Grafana k6** running outside Kubernetes against the `frontend` NodePort (`:30080`), driving requests through the full **frontend → backend → auth** chain.
 
+### 1. Quick Smoke Test (10s)
 ```bash
-chmod +x scripts/traffic-gen.sh
-bash scripts/traffic-gen.sh
+./load-testing/k6/run.sh smoke
 ```
 
-Tail the request log:
-
+### 2. Staged Ramp-Up Load Test (3m)
 ```bash
-kubectl logs -f traffic-gen -n demo
+./load-testing/k6/run.sh ramp-up
 ```
 
-Stop and clean up:
-
+### 3. Sustained / Custom Load
 ```bash
-kubectl delete pod traffic-gen -n demo
+# Run 5 virtual users for 10 minutes
+./load-testing/k6/run.sh smoke --duration 10m --vus 5
+
+# Detached background execution for dashboard demos
+nohup ./load-testing/k6/run.sh smoke --duration 1h --vus 5 > k6.log 2>&1 &
 ```
 
 ---

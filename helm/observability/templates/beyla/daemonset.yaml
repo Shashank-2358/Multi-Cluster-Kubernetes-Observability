@@ -29,6 +29,13 @@ data:
       enable: true
       print_flows: false
 
+    # Global metrics features
+    metrics:
+      features:
+        - application
+        - network
+        - network_flow_packets
+
     # Prometheus exporter
     prometheus_export:
       port: 9090
