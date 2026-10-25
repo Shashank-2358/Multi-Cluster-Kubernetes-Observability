@@ -12,19 +12,44 @@ data:
       "id": null,
       "uid": "extended-beyla",
       "title": "Phase 0 — Extended L4 + L7 Metrics",
-      "description": "Additional Beyla eBPF metrics: TCP RTT, retransmissions, packets (L4) · client latency, active requests, body size (L7)",
-      "tags": ["beyla", "phase0", "ebpf", "extended"],
+      "description": "Multi-Cluster eBPF Telemetry: L4 Network socket flows and L7 HTTP RED metrics across System-1 and System-2",
+      "tags": ["beyla", "phase0", "ebpf", "extended", "multicluster"],
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 1,
-      "refresh": "15s",
+      "version": 3,
+      "refresh": "10s",
       "time": { "from": "now-15m", "to": "now" },
+      "templating": {
+        "list": [
+          {
+            "name": "cluster",
+            "type": "query",
+            "label": "Cluster",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "definition": "label_values(beyla_network_flow_bytes_total, cluster)",
+            "query": {
+              "query": "label_values(beyla_network_flow_bytes_total, cluster)",
+              "refId": "ClusterVar"
+            },
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true,
+            "current": {
+              "selected": true,
+              "text": "All",
+              "value": "$__all"
+            },
+            "refresh": 1,
+            "sort": 1
+          }
+        ]
+      },
       "panels": [
 
         {
           "id": 10,
           "type": "row",
-          "title": "L4 — TCP Network Metrics",
+          "title": "L4 — Network Layer Metrics (eBPF Socket Flows)",
           "collapsed": false,
           "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 }
         },
@@ -32,64 +57,46 @@ data:
         {
           "id": 11,
           "type": "timeseries",
-          "title": "L4 · TCP Round-Trip Time (RTT) p50 / p95 / p99",
-          "description": "TCP RTT histogram between pod pairs captured by eBPF fentry/tcp_rcv_established. High RTT indicates network congestion or cross-node latency.",
-          "gridPos": { "x": 0, "y": 1, "w": 24, "h": 8 },
+          "title": "L4 · Network Throughput (Bytes/sec)",
+          "description": "Total network throughput observed on socket layers by Beyla eBPF across communicating endpoints.",
+          "gridPos": { "x": 0, "y": 1, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "histogram_quantile(0.50, sum(rate(beyla_network_flow_rtt_seconds_bucket{k8s_src_namespace=\"demo\"}[2m])) by (le, k8s_src_owner_name, k8s_dst_owner_name))",
-              "legendFormat": "p50 {{`{{k8s_src_owner_name}}`}}→{{`{{k8s_dst_owner_name}}`}}",
+              "expr": "sum(rate(beyla_network_flow_bytes_total{cluster=~\"$cluster\"}[1m])) by (cluster, k8s_src_owner_name, k8s_dst_owner_name)",
+              "legendFormat": "[{{`{{cluster}}`}}] {{`{{k8s_src_owner_name}} → {{k8s_dst_owner_name}}`}}",
               "refId": "A"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum(rate(beyla_network_flow_rtt_seconds_bucket{k8s_src_namespace=\"demo\"}[2m])) by (le, k8s_src_owner_name, k8s_dst_owner_name))",
-              "legendFormat": "p95 {{`{{k8s_src_owner_name}}`}}→{{`{{k8s_dst_owner_name}}`}}",
-              "refId": "B"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum(rate(beyla_network_flow_rtt_seconds_bucket{k8s_src_namespace=\"demo\"}[2m])) by (le, k8s_src_owner_name, k8s_dst_owner_name))",
-              "legendFormat": "p99 {{`{{k8s_src_owner_name}}`}}→{{`{{k8s_dst_owner_name}}`}}",
-              "refId": "C"
             }
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "s",
+              "unit": "Bps",
               "color": { "mode": "palette-classic" },
-              "custom": { "lineWidth": 2, "fillOpacity": 8 }
+              "custom": { "lineWidth": 2, "fillOpacity": 10 }
             }
           },
-          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } }
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" } }
         },
 
         {
           "id": 12,
           "type": "timeseries",
-          "title": "L4 · TCP Retransmissions/sec",
-          "description": "Rate of TCP retransmitted segments per pod-pair flow. Sustained retransmissions indicate packet loss, congestion, or unstable links.",
-          "gridPos": { "x": 0, "y": 9, "w": 12, "h": 8 },
+          "title": "L4 · Flow Direction Breakdown (Request vs Response Bytes)",
+          "description": "Aggregated data volume separated into inbound request bytes and outbound response bytes.",
+          "gridPos": { "x": 12, "y": 1, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "sum(rate(beyla_network_flow_retransmissions_total{k8s_src_namespace=\"demo\"}[1m])) by (k8s_src_owner_name, k8s_dst_owner_name)",
-              "legendFormat": "{{`{{k8s_src_owner_name}}`}}→{{`{{k8s_dst_owner_name}}`}}",
+              "expr": "sum(rate(beyla_network_flow_bytes_total{cluster=~\"$cluster\"}[1m])) by (cluster, direction)",
+              "legendFormat": "[{{`{{cluster}}`}}] {{`{{direction}}`}}",
               "refId": "A"
             }
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "cps",
+              "unit": "Bps",
               "color": { "mode": "palette-classic" },
-              "custom": { "lineWidth": 2, "fillOpacity": 10 },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  { "color": "green", "value": null },
-                  { "color": "yellow", "value": 1 },
-                  { "color": "red", "value": 10 }
-                ]
-              }
+              "custom": { "lineWidth": 2, "fillOpacity": 10 }
             }
           },
           "options": { "legend": { "displayMode": "list", "placement": "bottom" } }
@@ -98,56 +105,134 @@ data:
         {
           "id": 13,
           "type": "timeseries",
-          "title": "L4 · Network Packets/sec",
-          "description": "Rate of packets sent per pod-pair flow (beyla_network_flow_packets_total). Useful for spotting asymmetric traffic or unexpected burst patterns.",
-          "gridPos": { "x": 12, "y": 9, "w": 12, "h": 8 },
+          "title": "L4 · Network Bandwidth (Bits/sec)",
+          "description": "Instantaneous network bandwidth utilization calculated from socket byte flows (* 8).",
+          "gridPos": { "x": 0, "y": 9, "w": 12, "h": 7 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "sum(rate(beyla_network_flow_packets_total{k8s_src_namespace=\"demo\"}[1m])) by (k8s_src_owner_name, k8s_dst_owner_name)",
-              "legendFormat": "{{`{{k8s_src_owner_name}}`}}→{{`{{k8s_dst_owner_name}}`}}",
+              "expr": "sum(rate(beyla_network_flow_bytes_total{cluster=~\"$cluster\"}[1m])) by (cluster) * 8",
+              "legendFormat": "[{{`{{cluster}}`}}] Bandwidth",
               "refId": "A"
             }
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "pps",
+              "unit": "bps",
               "color": { "mode": "palette-classic" },
-              "custom": { "lineWidth": 2, "fillOpacity": 8 }
+              "custom": { "lineWidth": 2, "fillOpacity": 12 }
             }
           },
           "options": { "legend": { "displayMode": "list", "placement": "bottom" } }
         },
 
         {
+          "id": 14,
+          "type": "stat",
+          "title": "L4 · Active Network Flow Paths",
+          "description": "Count of distinct active socket communication paths being tracked by eBPF.",
+          "gridPos": { "x": 12, "y": 9, "w": 12, "h": 7 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "count(rate(beyla_network_flow_bytes_total{cluster=~\"$cluster\"}[1m]) > 0) by (cluster) or vector(0)",
+              "legendFormat": "[{{`{{cluster}}`}}] Active Flows",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "blue", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              }
+            }
+          },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+
+        {
           "id": 20,
           "type": "row",
-          "title": "L7 — HTTP Application Metrics",
+          "title": "L7 — HTTP Application Metrics (eBPF HTTP Traces)",
           "collapsed": false,
-          "gridPos": { "x": 0, "y": 17, "w": 24, "h": 1 }
+          "gridPos": { "x": 0, "y": 16, "w": 24, "h": 1 }
         },
 
         {
           "id": 21,
           "type": "timeseries",
-          "title": "L7 · HTTP Client Latency p50 / p95 / p99 (outbound per-hop)",
-          "description": "Client-side HTTP call duration from Beyla's http_client_request_duration_seconds histogram. Shows outbound latency as seen by each service (frontend's view of backend, backend's view of auth). Compare against server-side p99 to isolate network vs. server processing time.",
-          "gridPos": { "x": 0, "y": 18, "w": 24, "h": 9 },
+          "title": "L7 · HTTP Request Rate per Hop (req/sec)",
+          "description": "Inbound HTTP request throughput captured per microservice hop across the full frontend -> backend -> auth chain.",
+          "gridPos": { "x": 0, "y": 17, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "histogram_quantile(0.50, sum(rate(http_client_request_duration_seconds_bucket{service_namespace=\"demo\"}[5m])) by (le, service_name))",
-              "legendFormat": "p50 {{`{{service_name}}`}}",
+              "expr": "sum(rate(http_server_request_duration_seconds_count{service_namespace=\"demo\", cluster=~\"$cluster\"}[1m])) by (cluster, server_address, http_route)",
+              "legendFormat": "[{{`{{cluster}}`}}] {{`{{server_address}} {{http_route}}`}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "color": { "mode": "palette-classic" },
+              "custom": { "lineWidth": 2, "fillOpacity": 8 }
+            }
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean"] } }
+        },
+
+        {
+          "id": 22,
+          "type": "timeseries",
+          "title": "L7 · Per-Hop Mean Latency Comparison (auth vs backend vs frontend)",
+          "description": "Average response latency per service hop. Visualizes how latency accumulates across the proxy chain.",
+          "gridPos": { "x": 12, "y": 17, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "(sum(rate(http_server_request_duration_seconds_sum{service_namespace=\"demo\", cluster=~\"$cluster\"}[1m])) by (cluster, server_address) / sum(rate(http_server_request_duration_seconds_count{service_namespace=\"demo\", cluster=~\"$cluster\"}[1m])) by (cluster, server_address)) * 1000",
+              "legendFormat": "[{{`{{cluster}}`}}] mean {{`{{server_address}}`}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "color": { "mode": "palette-classic" },
+              "custom": { "lineWidth": 2, "fillOpacity": 8 }
+            }
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } }
+        },
+
+        {
+          "id": 23,
+          "type": "timeseries",
+          "title": "L7 · HTTP Latency Percentiles (p50 / p95 / p99)",
+          "description": "HTTP latency percentiles computed across all demo services from Beyla's duration histograms.",
+          "gridPos": { "x": 0, "y": 25, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(http_server_request_duration_seconds_bucket{service_namespace=\"demo\", cluster=~\"$cluster\"}[5m])) by (le, cluster, server_address))",
+              "legendFormat": "[{{`{{cluster}}`}}] p50 {{`{{server_address}}`}}",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.95, sum(rate(http_client_request_duration_seconds_bucket{service_namespace=\"demo\"}[5m])) by (le, service_name))",
-              "legendFormat": "p95 {{`{{service_name}}`}}",
+              "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{service_namespace=\"demo\", cluster=~\"$cluster\"}[5m])) by (le, cluster, server_address))",
+              "legendFormat": "[{{`{{cluster}}`}}] p95 {{`{{server_address}}`}}",
               "refId": "B"
             },
             {
-              "expr": "histogram_quantile(0.99, sum(rate(http_client_request_duration_seconds_bucket{service_namespace=\"demo\"}[5m])) by (le, service_name))",
-              "legendFormat": "p99 {{`{{service_name}}`}}",
+              "expr": "histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds_bucket{service_namespace=\"demo\", cluster=~\"$cluster\"}[5m])) by (le, cluster, server_address))",
+              "legendFormat": "[{{`{{cluster}}`}}] p99 {{`{{server_address}}`}}",
               "refId": "C"
             }
           ],
@@ -158,68 +243,26 @@ data:
               "custom": { "lineWidth": 2, "fillOpacity": 8 }
             }
           },
-          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } }
-        },
-
-        {
-          "id": 22,
-          "type": "timeseries",
-          "title": "L7 · HTTP Server Active Requests (in-flight concurrency)",
-          "description": "Gauge of HTTP requests currently being processed on each service (http_server_active_requests). A sustained high value relative to normal indicates a concurrency backlog or slow upstream.",
-          "gridPos": { "x": 0, "y": 27, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [
-            {
-              "expr": "sum(http_server_active_requests{service_namespace=\"demo\"}) by (service_name)",
-              "legendFormat": "{{`{{service_name}}`}}",
-              "refId": "A"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "color": { "mode": "palette-classic" },
-              "custom": { "lineWidth": 2, "fillOpacity": 12 },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  { "color": "green", "value": null },
-                  { "color": "yellow", "value": 10 },
-                  { "color": "red", "value": 50 }
-                ]
-              }
-            }
-          },
           "options": { "legend": { "displayMode": "list", "placement": "bottom" } }
         },
 
         {
-          "id": 23,
+          "id": 24,
           "type": "timeseries",
-          "title": "L7 · HTTP Request Body Size p50 / p95 / p99",
-          "description": "Inbound HTTP request body size distribution (http_server_request_body_size_bytes histogram). Helps detect unexpectedly large payloads that might strain memory or throughput.",
-          "gridPos": { "x": 12, "y": 27, "w": 12, "h": 8 },
+          "title": "L7 · HTTP Response Status Codes (2xx / 4xx / 5xx)",
+          "description": "Distribution of HTTP status codes emitted by each service hop.",
+          "gridPos": { "x": 12, "y": 25, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "histogram_quantile(0.50, sum(rate(http_server_request_body_size_bytes_bucket{service_namespace=\"demo\"}[5m])) by (le, service_name))",
-              "legendFormat": "p50 {{`{{service_name}}`}}",
+              "expr": "sum(rate(http_server_request_duration_seconds_count{service_namespace=\"demo\", cluster=~\"$cluster\"}[1m])) by (cluster, server_address, http_response_status_code)",
+              "legendFormat": "[{{`{{cluster}}`}}] {{`{{server_address}} HTTP {{http_response_status_code}}`}}",
               "refId": "A"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum(rate(http_server_request_body_size_bytes_bucket{service_namespace=\"demo\"}[5m])) by (le, service_name))",
-              "legendFormat": "p95 {{`{{service_name}}`}}",
-              "refId": "B"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum(rate(http_server_request_body_size_bytes_bucket{service_namespace=\"demo\"}[5m])) by (le, service_name))",
-              "legendFormat": "p99 {{`{{service_name}}`}}",
-              "refId": "C"
             }
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "bytes",
+              "unit": "reqps",
               "color": { "mode": "palette-classic" },
               "custom": { "lineWidth": 2, "fillOpacity": 8 }
             }

@@ -1,13 +1,22 @@
-# Default values for observability.
+# Default values for observability (Single-Cluster Standalone Mode).
+# For multi-cluster setups, see helm/values-system1.yaml, values-system2.yaml, and values-system3.yaml.
 
 sampleApps:
   enabled: true
 
-prometheus:
-  enabled: true
-
 beyla:
   enabled: true
+  service:
+    nodePort: 30090
+
+prometheus:
+  enabled: true
+  # In multi-cluster mode, configure remoteClusters to scrape edge clusters:
+  # remoteClusters:
+  #   - name: System-1
+  #     target: "<FRIEND_IP>:30090"
+  #   - name: System-2
+  #     target: "<YOUR_IP>:30090"
 
 grafana:
   enabled: true

@@ -1,0 +1,18 @@
+# System-1 (Friend's Cluster) — Edge Node
+# Runs demo microservices + Grafana Beyla eBPF
+# Exposes Beyla metrics on NodePort 30090 for System-3 to scrape
+
+sampleApps:
+  enabled: true
+
+beyla:
+  enabled: true
+  service:
+    nodePort: 30090
+
+# Monitoring storage and UI are disabled on edge nodes
+prometheus:
+  enabled: false
+
+grafana:
+  enabled: false

@@ -1,0 +1,23 @@
+# System-3 (Central Monitoring Server)
+# Runs Central Prometheus TSDB + Central Grafana Dashboards
+# Scrapes metrics centrally from System-1 and System-2 over the network (Option A)
+
+sampleApps:
+  enabled: false
+
+beyla:
+  enabled: false
+
+prometheus:
+  enabled: true
+  remoteClusters:
+    - name: System-1
+      # Replace with your friend's LAN / reachable IP address
+      target: "192.168.1.50:30090"
+
+    - name: System-2
+      # Your Windows host LAN IP address (verified via eth1 mirrored interface)
+      target: "192.168.31.112:30090"
+
+grafana:
+  enabled: true

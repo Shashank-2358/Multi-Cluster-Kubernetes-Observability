@@ -12,8 +12,9 @@ if [[ ! -x "${K6_BIN}" ]]; then
   exit 1
 fi
 
-# Detect Kubernetes Node IP
-NODE_IP=$(kubectl get node -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || echo "127.0.0.1")
+# Detect Kubernetes Node IP (take first IPv4 address if dual-stack IPv6 is returned)
+NODE_IP=$(kubectl get node -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null | awk '{print $1}')
+NODE_IP="${NODE_IP:-127.0.0.1}"
 TARGET_URL="http://${NODE_IP}:30080/"
 
 # Default scenario

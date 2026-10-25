@@ -1,0 +1,18 @@
+{{- if .Values.beyla.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: beyla-metrics
+  namespace: beyla
+  labels:
+    app: beyla
+spec:
+  type: NodePort
+  selector:
+    app: beyla
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      nodePort: {{ .Values.beyla.service.nodePort | default 30090 }}
+{{- end }}

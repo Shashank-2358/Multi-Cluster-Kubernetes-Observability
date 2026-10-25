@@ -10,13 +10,38 @@ data:
       "id": null,
       "uid": "phase0-beyla",
       "title": "Phase 0 — Beyla L4 + L7 Observability",
-      "description": "Single-cluster PoC: Grafana Beyla eBPF metrics via Prometheus",
-      "tags": ["beyla", "phase0", "ebpf"],
+      "description": "Multi-Cluster Observability: Grafana Beyla eBPF metrics across System-1 and System-2",
+      "tags": ["beyla", "phase0", "ebpf", "multicluster"],
       "timezone": "browser",
       "schemaVersion": 38,
-      "version": 2,
-      "refresh": "15s",
+      "version": 3,
+      "refresh": "10s",
       "time": { "from": "now-15m", "to": "now" },
+      "templating": {
+        "list": [
+          {
+            "name": "cluster",
+            "type": "query",
+            "label": "Cluster",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "definition": "label_values(beyla_network_flow_bytes_total, cluster)",
+            "query": {
+              "query": "label_values(beyla_network_flow_bytes_total, cluster)",
+              "refId": "ClusterVar"
+            },
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true,
+            "current": {
+              "selected": true,
+              "text": "All",
+              "value": "$__all"
+            },
+            "refresh": 1,
+            "sort": 1
+          }
+        ]
+      },
       "panels": [
         {
           "id": 1,
@@ -27,8 +52,8 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "rate(beyla_network_flow_bytes_total[1m])",
-              "legendFormat": "{{`{{direction}} {{k8s_src_owner_name}}→{{k8s_dst_owner_name}}`}}",
+              "expr": "sum(rate(beyla_network_flow_bytes_total{cluster=~\"$cluster\"}[1m])) by (cluster, direction, k8s_src_owner_name, k8s_dst_owner_name)",
+              "legendFormat": "[{{`{{cluster}}`}}] {{`{{direction}} {{k8s_src_owner_name}}→{{k8s_dst_owner_name}}`}}",
               "refId": "A"
             }
           ],
@@ -49,8 +74,8 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "sum(rate(http_server_request_duration_seconds_count[1m])) by (service_name, url_path)",
-              "legendFormat": "{{`{{service_name}} {{url_path}}`}}",
+              "expr": "sum(rate(http_server_request_duration_seconds_count{service_namespace=\"demo\", cluster=~\"$cluster\"}[1m])) by (cluster, server_address, http_route)",
+              "legendFormat": "[{{`{{cluster}}`}}] {{`{{server_address}} {{http_route}}`}}",
               "refId": "A"
             }
           ],
@@ -71,18 +96,18 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "histogram_quantile(0.50, sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le, service_name))",
-              "legendFormat": "p50 {{`{{service_name}}`}}",
+              "expr": "histogram_quantile(0.50, sum(rate(http_server_request_duration_seconds_bucket{service_namespace=\"demo\", cluster=~\"$cluster\"}[5m])) by (le, cluster, server_address))",
+              "legendFormat": "[{{`{{cluster}}`}}] p50 {{`{{server_address}}`}}",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le, service_name))",
-              "legendFormat": "p95 {{`{{service_name}}`}}",
+              "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{service_namespace=\"demo\", cluster=~\"$cluster\"}[5m])) by (le, cluster, server_address))",
+              "legendFormat": "[{{`{{cluster}}`}}] p95 {{`{{server_address}}`}}",
               "refId": "B"
             },
             {
-              "expr": "histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le, service_name))",
-              "legendFormat": "p99 {{`{{service_name}}`}}",
+              "expr": "histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds_bucket{service_namespace=\"demo\", cluster=~\"$cluster\"}[5m])) by (le, cluster, server_address))",
+              "legendFormat": "[{{`{{cluster}}`}}] p99 {{`{{server_address}}`}}",
               "refId": "C"
             }
           ],
@@ -103,8 +128,8 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~\"5..\"}[1m])) by (service_name, http_response_status_code) or vector(0)",
-              "legendFormat": "{{`{{service_name}} HTTP {{http_response_status_code}}`}}",
+              "expr": "sum(rate(http_server_request_duration_seconds_count{service_namespace=\"demo\", cluster=~\"$cluster\", http_response_status_code=~\"5..\"}[1m])) by (cluster, server_address, http_response_status_code) or vector(0)",
+              "legendFormat": "[{{`{{cluster}}`}}] {{`{{server_address}} HTTP {{http_response_status_code}}`}}",
               "refId": "A"
             }
           ],
