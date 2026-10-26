@@ -12,12 +12,12 @@ prometheus:
   enabled: true
   remoteClusters:
     - name: System-1
-      # Replace with your friend's LAN / reachable IP address
-      target: "192.168.1.50:30090"
+      # Tailscale IP — stable across all networks, never changes
+      target: "100.121.118.12:30090"
 
     - name: System-2
-      # Your Windows host LAN IP address (verified via eth1 mirrored interface)
-      target: "192.168.31.112:30090"
+      # Tailscale IP — stable across all networks, never changes
+      target: "100.67.50.8:30090"
 
 grafana:
   enabled: true

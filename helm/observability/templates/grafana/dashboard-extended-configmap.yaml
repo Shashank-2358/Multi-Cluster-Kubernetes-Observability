@@ -129,14 +129,14 @@ data:
         {
           "id": 14,
           "type": "stat",
-          "title": "L4 · Active Network Flow Paths",
-          "description": "Count of distinct active socket communication paths being tracked by eBPF.",
+          "title": "L4 · Monitored Pods",
+          "description": "Count of distinct pods/workloads actively observed by Beyla eBPF (unique k8s_dst_owner_name with non-zero traffic in the last 1m). Should equal the number of running demo pods.",
           "gridPos": { "x": 12, "y": 9, "w": 12, "h": 7 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "count(rate(beyla_network_flow_bytes_total{cluster=~\"$cluster\"}[1m]) > 0) by (cluster) or vector(0)",
-              "legendFormat": "[{{`{{cluster}}`}}] Active Flows",
+              "expr": "count(count by (k8s_dst_owner_name) (rate(beyla_network_flow_bytes_total{cluster=~\"$cluster\", k8s_dst_owner_name!=\"\"}[1m]) > 0)) by (cluster) or vector(0)",
+              "legendFormat": "[{{`{{cluster}}`}}] Monitored Pods",
               "refId": "A"
             }
           ],
@@ -147,8 +147,9 @@ data:
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  { "color": "blue", "value": null },
-                  { "color": "green", "value": 1 }
+                  { "color": "red",   "value": null },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "green",  "value": 3 }
                 ]
               }
             }
