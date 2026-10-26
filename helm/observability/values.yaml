@@ -4,6 +4,14 @@
 sampleApps:
   enabled: true
 
+# HPA: Horizontal Pod Autoscaler for demo services (frontend, backend, auth)
+# Enable on edge clusters where sample apps run. Requires metrics-server.
+hpa:
+  enabled: false          # override to true in system-specific values files
+  minReplicas: 1
+  maxReplicas: 5
+  cpuTargetPercent: 50    # scale when CPU usage exceeds 50% of request
+
 beyla:
   enabled: true
   service:

@@ -130,12 +130,12 @@ data:
           "id": 14,
           "type": "stat",
           "title": "L4 · Monitored Pods",
-          "description": "Count of distinct pods/workloads actively observed by Beyla eBPF (unique k8s_dst_owner_name with non-zero traffic in the last 1m). Should equal the number of running demo pods.",
+          "description": "Count of distinct microservice pods monitored by Beyla eBPF in the demo namespace (target_info). Accurately reflects running demo pod count even when idle.",
           "gridPos": { "x": 12, "y": 9, "w": 12, "h": 7 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "count(count by (k8s_dst_owner_name) (rate(beyla_network_flow_bytes_total{cluster=~\"$cluster\", k8s_dst_owner_name!=\"\"}[1m]) > 0)) by (cluster) or vector(0)",
+              "expr": "count(target_info{service_namespace=\"demo\", cluster=~\"$cluster\"}) by (cluster) or vector(0)",
               "legendFormat": "[{{`{{cluster}}`}}] Monitored Pods",
               "refId": "A"
             }
@@ -158,11 +158,60 @@ data:
         },
 
         {
+          "id": 30,
+          "type": "row",
+          "title": "HPA — Pod Autoscaling (scales with traffic)",
+          "collapsed": false,
+          "gridPos": { "x": 0, "y": 16, "w": 24, "h": 1 }
+        },
+
+        {
+          "id": 31,
+          "type": "timeseries",
+          "title": "Pod Count Over Time (HPA Scaling)",
+          "description": "Number of unique pods actively handling HTTP traffic, measured by counting distinct k8s_pod_name labels from Beyla. Watch this rise during k6 ramp-up as HPA spins up new pods, and fall after ramp-down.",
+          "gridPos": { "x": 0, "y": 17, "w": 24, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "count(count by (k8s_pod_name, server_address) (http_server_request_duration_seconds_count{service_namespace=\"demo\", cluster=~\"$cluster\", k8s_pod_name!=\"\"})) by (cluster, server_address)",
+              "legendFormat": "[{{`{{cluster}}`}}] {{`{{server_address}}`}} pods",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "decimals": 0,
+              "min": 0,
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 20,
+                "spanNulls": false,
+                "drawStyle": "line",
+                "lineInterpolation": "stepAfter"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+
+        {
           "id": 20,
           "type": "row",
           "title": "L7 — HTTP Application Metrics (eBPF HTTP Traces)",
           "collapsed": false,
-          "gridPos": { "x": 0, "y": 16, "w": 24, "h": 1 }
+          "gridPos": { "x": 0, "y": 25, "w": 24, "h": 1 }
         },
 
         {
@@ -170,7 +219,7 @@ data:
           "type": "timeseries",
           "title": "L7 · HTTP Request Rate per Hop (req/sec)",
           "description": "Inbound HTTP request throughput captured per microservice hop across the full frontend -> backend -> auth chain.",
-          "gridPos": { "x": 0, "y": 17, "w": 12, "h": 8 },
+          "gridPos": { "x": 0, "y": 26, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
@@ -194,7 +243,7 @@ data:
           "type": "timeseries",
           "title": "L7 · Per-Hop Mean Latency Comparison (auth vs backend vs frontend)",
           "description": "Average response latency per service hop. Visualizes how latency accumulates across the proxy chain.",
-          "gridPos": { "x": 12, "y": 17, "w": 12, "h": 8 },
+          "gridPos": { "x": 12, "y": 26, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
@@ -218,7 +267,7 @@ data:
           "type": "timeseries",
           "title": "L7 · HTTP Latency Percentiles (p50 / p95 / p99)",
           "description": "HTTP latency percentiles computed across all demo services from Beyla's duration histograms.",
-          "gridPos": { "x": 0, "y": 25, "w": 12, "h": 8 },
+          "gridPos": { "x": 0, "y": 34, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
@@ -252,7 +301,7 @@ data:
           "type": "timeseries",
           "title": "L7 · HTTP Response Status Codes (2xx / 4xx / 5xx)",
           "description": "Distribution of HTTP status codes emitted by each service hop.",
-          "gridPos": { "x": 12, "y": 25, "w": 12, "h": 8 },
+          "gridPos": { "x": 12, "y": 34, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {

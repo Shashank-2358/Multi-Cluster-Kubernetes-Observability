@@ -5,6 +5,13 @@
 sampleApps:
   enabled: true
 
+# HPA enabled on this cluster — pods scale with k6 traffic load
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  cpuTargetPercent: 50
+
 beyla:
   enabled: true
   service:

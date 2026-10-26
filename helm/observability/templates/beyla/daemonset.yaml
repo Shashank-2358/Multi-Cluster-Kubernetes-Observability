@@ -15,6 +15,8 @@ data:
     # IdentityPidsFilter is used instead and accepts all captured eBPF spans.
     discovery:
       system_wide: true
+      instrument:
+        - k8s_namespace: demo
       exclude_instrument:
         - k8s_namespace: kube-system
         - k8s_namespace: monitoring
@@ -28,6 +30,16 @@ data:
     network:
       enable: true
       print_flows: false
+
+    # Filters: Restrict Beyla strictly to the demo microservice namespace
+    # Drops host/WSL2 background TCP sockets so target_info only contains demo pods
+    filter:
+      network:
+        k8s_dst_namespace:
+          match: "demo"
+      application:
+        service_namespace:
+          match: "demo"
 
     # Global metrics features
     metrics:
